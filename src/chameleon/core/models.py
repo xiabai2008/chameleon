@@ -116,6 +116,7 @@ class CrawlJob(BaseModel):
     status: JobStatus = JobStatus.QUEUED
     strategy: str = "adaptive"
     max_pages: int = 50
+    max_depth: int = 3
     pages_crawled: int = 0
     pages_failed: int = 0
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

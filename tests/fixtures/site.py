@@ -149,6 +149,34 @@ CAPTCHA_PAGE = """<!DOCTYPE html>
 """
 
 
+SITE_PAGE_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>站点页面 {page}</title></head>
+<body>
+<h1>站点页面 {page}</h1>
+<p>这是测试站点第 {page} 页的内容。Lorem ipsum dolor sit amet, consectetur
+adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna
+aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+nisi ut aliquip ex ea commodo consequat. 页面正文填充足够长以便通过校验。</p>
+<nav class="links">
+{links}
+</nav>
+</body></html>
+"""
+
+SITE_PAGES = "abcdefghij"
+
+
+def _site_links(page: str) -> str:
+    idx = SITE_PAGES.index(page)
+    prev_page = SITE_PAGES[(idx - 1) % len(SITE_PAGES)]
+    next_page = SITE_PAGES[(idx + 1) % len(SITE_PAGES)]
+    links = [f'<a href="/site/{p}">页面{p}</a>' for p in (prev_page, next_page)]
+    links.append('<a href="https://external.example.com/foreign">外链</a>')
+    links.append('<a href="/asset.jpg">图片</a>')
+    links.append('<a href="#section">锚点</a>')
+    return "\n".join(links)
+
+
 def create_test_app() -> FastAPI:
     app = FastAPI()
 
@@ -207,6 +235,16 @@ def create_test_app() -> FastAPI:
     @app.get("/captcha-page")
     async def captcha_page() -> HTMLResponse:
         return HTMLResponse(CAPTCHA_PAGE)
+
+    @app.get("/site/{page}")
+    async def site_page(page: str) -> Response:
+        if page not in SITE_PAGES:
+            return Response(content="<html><body>404</body></html>", status_code=404)
+        return HTMLResponse(SITE_PAGE_TEMPLATE.format(page=page, links=_site_links(page)))
+
+    @app.get("/robots.txt")
+    async def robots() -> PlainTextResponse:
+        return PlainTextResponse("User-agent: *\nDisallow: /site/e\n")
 
     @app.get("/gzip")
     async def gzip_page() -> Response:
