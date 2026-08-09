@@ -3,9 +3,48 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterator
+import threading
+from collections.abc import AsyncIterator, Iterator
 
+import httpx
 import pytest
+import uvicorn
+from fastapi import FastAPI
+
+from tests.fixtures.site import create_test_app
+
+TEST_PORT = 8765
+BASE_URL = f"http://127.0.0.1:{TEST_PORT}"
+
+
+class _ServerThread(threading.Thread):
+    def __init__(self, app: FastAPI, port: int) -> None:
+        super().__init__(daemon=True)
+        self._config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error")
+        self._server = uvicorn.Server(self._config)
+
+    def run(self) -> None:
+        asyncio.run(self._server.serve())
+
+
+@pytest.fixture(scope="session")
+def test_server() -> AsyncIterator[str]:
+    """会话级测试站点服务器，返回 BASE_URL。"""
+    thread = _ServerThread(create_test_app(), TEST_PORT)
+    thread.start()
+    asyncio.run(_server_wait_ready())
+    yield BASE_URL
+
+
+async def _server_wait_ready() -> None:
+    async with httpx.AsyncClient(timeout=0.5) as client:
+        for _ in range(100):
+            try:
+                await client.get(f"http://127.0.0.1:{TEST_PORT}/short")
+                return
+            except Exception:
+                await asyncio.sleep(0.05)
+    raise RuntimeError("test server did not start")
 
 
 @pytest.fixture

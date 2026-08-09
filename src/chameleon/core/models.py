@@ -59,7 +59,24 @@ class FetchResult(BaseModel):
     engine: EngineType = EngineType.HTTP
     proxy_used: str | None = None
     response_time_ms: int = 0
+    escalation_level: int = 0
+    retries: int = 0
     error: str | None = None
+
+
+class FetchRequest(BaseModel):
+    """引擎层统一请求参数。"""
+
+    model_config = ConfigDict(extra="allow")
+
+    url: str
+    headers: dict[str, str] = Field(default_factory=dict)
+    timeout: float | None = None
+    wait_for: str | None = None
+    js_render: bool = False
+    proxy: str | None = None
+    cookies: list[dict[str, str]] = Field(default_factory=list)
+    max_output_tokens: int = 0
 
 
 class ContentOutput(BaseModel):
