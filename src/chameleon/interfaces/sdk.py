@@ -18,7 +18,9 @@ from chameleon.crawler.scheduler import CrawlScheduler
 from chameleon.engines.browser_engine import BrowserEngine
 from chameleon.engines.http_engine import HttpEngine
 from chameleon.engines.tls_engine import TlsHttpEngine
+from chameleon.infra.cache import CacheLayer
 from chameleon.infra.logging import bind_request_id, configure_logging, get_logger
+from chameleon.infra.metrics import Metrics
 from chameleon.pipeline.extractors.llm_extractor import LLMExtractor, OpenAIClient
 from chameleon.pipeline.pipeline import Pipeline
 from chameleon.utils.url_utils import hostname
@@ -63,6 +65,8 @@ class Chameleon:
             max_retries=self.settings.engine.max_retries,
         )
         self.pipeline = Pipeline(llm=self.llm, default_max_tokens=8000)
+        self.cache = CacheLayer()
+        self.metrics = Metrics()
         self.robots = RobotsTxt()
         self.crawler = DeepCrawler(
             self.router,
@@ -96,6 +100,13 @@ class Chameleon:
         bind_request_id(request_id)
         if proxy_region:
             await self.proxy_manager.add(f"region:{proxy_region}", region=proxy_region)  # 区域标记占位
+        cache_key = f"{url}|{mode}|{output_format}"
+        cached = self.cache.get_raw(cache_key)
+        if cached is not None:
+            log.info("cache_hit", url=url, layer="raw")
+            if isinstance(cached, ScrapeResult):
+                return cached
+            return ScrapeResult.model_validate(cached)
         raw = await self.router.fetch(
             FetchRequest(
                 url=url,
@@ -106,7 +117,7 @@ class Chameleon:
             mode=mode,
         )
         selected_strategy = "llm" if extract_prompt else strategy
-        return await self.pipeline.process(
+        result = await self.pipeline.process(
             raw,
             output_format=output_format,
             schema=schema,
@@ -114,6 +125,9 @@ class Chameleon:
             strategy=selected_strategy,
             max_output_tokens=max_output_tokens,
         )
+        if result.status.value == "success":
+            self.cache.set_raw(cache_key, result)
+        return result
 
     async def extract(self, url: str, schema: dict[str, Any], *, strategy: str = "auto") -> ScrapeResult:
         return await self.scrape(url, schema=schema, strategy=strategy, output_format="json")

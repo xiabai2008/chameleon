@@ -28,10 +28,12 @@ from chameleon.engines.base import BaseEngine
 from chameleon.engines.http_engine import HttpEngine
 from chameleon.engines.tls_engine import TlsHttpEngine
 from chameleon.infra.logging import get_logger
+from chameleon.infra.metrics import Metrics
 from chameleon.infra.session_pool import SessionPool
 from chameleon.utils.url_utils import hostname
 
 log = get_logger("router")
+_metrics = Metrics()
 
 _ESCALATABLE_REASONS = {"blocked_status_403", "blocked_status_429", "content_too_short", "anti_bot_marker"}
 
@@ -168,6 +170,8 @@ class SmartRouter:
             )
 
         valid, reason = self.validator.is_valid(result)
+        _metrics.observe_escalation(level)
+        _metrics.record_request(engine=engine.name, status="ok" if valid else "invalid")
         # 验证码检测（L6）：内容含验证码特征 → 尝试解决，失败上报
         if self.captcha_router is not None:
             captcha_type = self.captcha_router.detect(result.content)

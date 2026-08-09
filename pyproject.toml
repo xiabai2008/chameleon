@@ -25,6 +25,7 @@ dependencies = [
     "markdownify>=1.2.3",
     "mcp<2",
     "playwright>=1.62.0",
+    "prometheus-client>=0.26.0",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "pyyaml>=6.0.3",
