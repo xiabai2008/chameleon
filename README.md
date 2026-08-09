@@ -62,11 +62,29 @@ uv run ruff check src tests
 uv run mypy src
 ```
 
+## 测试
+
+```bash
+uv run pytest          # 229 个测试（含 Playwright 真实渲染、反爬模拟站对抗）
+uv run ruff check src tests
+uv run mypy src
+```
+
+## 边界与声明
+
+**反爬对抗是持续的军备竞赛**，本工具不保证对任何站点必然成功：
+
+- 持续演进的验证码（滑块/设备指纹/风控评分）可能击败任何自动化手段
+- 内置升级链全程透明可观测——结果中记录实际使用的引擎与升级层级，Agent 可据此判断可信度
+- 住宅代理与打码服务为第三方付费依赖，请按预算使用
+- 仅在获得授权的范围内使用：遵守 robots.txt、站点服务条款、当地法律（GDPR/个保法）与限速要求。滥用造成的后果由使用者自行承担
+
 ## 文档
 
 - [开发方案](docs/开发方案.md) — 项目定位、架构、接口设计、竞品对比
 - [完整开发路线图](docs/完整开发路线图.md) — P0-P8 全部任务分解与验收标准
 - [架构文档](docs/architecture.md) / [MCP 工具](docs/mcp_tools.md) / [REST API](docs/api_reference.md)
+- English: [README.en.md](README.en.md)
 
 ## 开源
 
