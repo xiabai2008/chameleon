@@ -199,6 +199,22 @@ ws.onmessage = (e) => {
 """
 
 
+TABLE_PAGE = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>数据表格</title></head>
+<body>
+<h1>季度销售报表</h1>
+<table id="sales">
+<thead><tr><th>季度</th><th>销售额</th><th>增长</th></tr></thead>
+<tbody>
+<tr><td>Q1</td><td>120万</td><td>+10%</td></tr>
+<tr><td>Q2</td><td>150万</td><td>+25%</td></tr>
+<tr><td>Q3</td><td>180万</td><td>+20%</td></tr>
+</tbody>
+</table>
+</body></html>
+"""
+
+
 def create_test_app() -> FastAPI:
     app = FastAPI()
 
@@ -281,6 +297,10 @@ def create_test_app() -> FastAPI:
     @app.get("/ws-page")
     async def ws_page() -> HTMLResponse:
         return HTMLResponse(WEBSOCKET_PAGE)
+
+    @app.get("/table")
+    async def table_page() -> HTMLResponse:
+        return HTMLResponse(TABLE_PAGE)
 
     @app.websocket("/ws")
     async def ws_endpoint(websocket: WebSocket) -> None:

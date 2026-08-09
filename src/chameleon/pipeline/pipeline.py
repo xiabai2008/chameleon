@@ -54,6 +54,10 @@ class Pipeline:
             from chameleon.pipeline.extractors.css_extractor import XPathExtractor
 
             return XPathExtractor()
+        if strategy == "table":
+            from chameleon.pipeline.extractors.table_extractor import TableExtractor
+
+            return TableExtractor()
         if strategy == "llm":
             if self.llm is None:
                 raise RuntimeError("llm 提取需要配置 LLMExtractor")

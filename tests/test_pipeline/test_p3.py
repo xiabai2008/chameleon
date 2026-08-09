@@ -215,3 +215,32 @@ async def test_pipeline_error_schema() -> None:
     result = await pipeline.process(raw, schema=bad_schema)
     assert result.error is not None
     assert "missing_required" in (result.error or "")
+
+
+def test_table_extractor() -> None:
+    import asyncio
+
+    from tests.fixtures.site import TABLE_PAGE
+
+    from chameleon.pipeline.extractors.table_extractor import TableExtractor
+
+    extractor = TableExtractor()
+    result = asyncio.run(extractor.extract(TABLE_PAGE, {"css": "#sales"}))
+    assert result["tables"][0]["headers"] == ["季度", "销售额", "增长"]
+    assert len(result["tables"][0]["rows"]) == 3
+    assert result["tables"][0]["rows"][0]["季度"] == "Q1"
+    assert result["tables"][0]["rows"][1]["销售额"] == "150万"
+
+
+def test_table_extractor_all_tables() -> None:
+    import asyncio
+
+    html = """
+    <table><tr><th>A</th><th>B</th></tr>
+    <tr><td>1</td><td>2</td></tr><tr><td>3</td><td>4</td></tr></table>
+    """
+    from chameleon.pipeline.extractors.table_extractor import TableExtractor
+
+    result = asyncio.run(TableExtractor().extract(html, {}))
+    assert len(result["tables"]) == 1
+    assert result["tables"][0]["rows"] == [{"A": "1", "B": "2"}, {"A": "3", "B": "4"}]
