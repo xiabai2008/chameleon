@@ -325,8 +325,7 @@ class Chameleon:
         from chameleon.crawler.robots import RobotsTxt
 
         robots = RobotsTxt()
-        base = f"{'https' if url.startswith('https') else 'http'}://{hostname(url)}"
-        resp = await robots._client.get(f"{base}/robots.txt")  # noqa: SLF001
+        resp = await robots._client.get(f"{RobotsTxt._origin(url)}/robots.txt")  # noqa: SLF001
         await robots.close()
         return resp.text
 
