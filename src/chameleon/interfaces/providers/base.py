@@ -26,6 +26,7 @@ class BaseProvider(ABC):
 
     async def close(self) -> None:
         """释放资源。默认无操作。"""
+        return None
 
 
 def provider_result(url: str, markdown: str, provider_name: str) -> ScrapeResult:
