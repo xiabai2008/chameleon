@@ -9,6 +9,7 @@ import time
 from chameleon.anti_detection.captcha_solver import CaptchaRouter
 from chameleon.anti_detection.identity_faker import IdentityFaker
 from chameleon.anti_detection.proxy_manager import ProxyManager
+from chameleon.anti_detection.strategy_memory import StrategyMemory
 from chameleon.core.content_validator import ContentValidator
 from chameleon.core.exceptions import (
     BlockedError,
@@ -57,6 +58,7 @@ class SmartRouter:
         *,
         tls_engine: TlsHttpEngine | None = None,
         captcha_router: CaptchaRouter | None = None,
+        memory: StrategyMemory | None = None,
         validator: ContentValidator | None = None,
         identity_faker: IdentityFaker | None = None,
         proxy_manager: ProxyManager | None = None,
@@ -67,6 +69,7 @@ class SmartRouter:
         self.browser_engine = browser_engine
         self.tls_engine = tls_engine
         self.captcha_router = captcha_router
+        self.memory = memory
         self.validator = validator or ContentValidator()
         self.identity = identity_faker or IdentityFaker()
         self.proxy_manager = proxy_manager
@@ -77,6 +80,7 @@ class SmartRouter:
         """执行带升级链的采集，返回最终 FetchResult。
 
         mode: auto（逐级升级）| static（仅 HTTP 裸请求）| dynamic（仅 Browser）
+        策略学习：auto 模式下从记忆的成功层级起跳（跳过已验证无效的低层级）。
         """
         if force_browser or mode == "dynamic":
             return await self._require_browser().fetch(request)
@@ -87,17 +91,25 @@ class SmartRouter:
             result.escalation_level = 0
             return result
 
-        steps = self._build_steps(request, mode)
+        start_level = self.memory.best_level(request.url) if self.memory is not None else None
+        if start_level:
+            log.info("memory_hit", url=request.url, start_level=start_level)
+        steps = self._build_steps(request, mode, start_level=start_level or 0)
         last_result: FetchResult | None = None
         last_reason: str | None = None
         for level, label, step_request in steps:
             result, ok, reason = await self._try_step(level, label, step_request)
             last_result, last_reason = result, reason
             if ok:
+                if self.memory is not None and mode == "auto":
+                    self.memory.remember(request.url, level)
                 return result
             log.info("step_failed", url=request.url, level=level, label=label, reason=reason)
 
         assert last_result is not None
+        # 全部失败：清除策略记忆（下次从全链路重新探测）
+        if self.memory is not None and mode == "auto":
+            self.memory.forget(request.url)
         # 最后一步是被反爬拦截（403/429）时，报告为 BlockedError 而非不可达
         if last_result.status_code in (403, 429):
             raise BlockedError(
@@ -108,7 +120,9 @@ class SmartRouter:
             f"all strategies failed for {request.url} (last reason: {last_reason})"
         )
 
-    def _build_steps(self, request: FetchRequest, mode: str) -> list[tuple[int, str, FetchRequest]]:
+    def _build_steps(
+        self, request: FetchRequest, mode: str, *, start_level: int = 0
+    ) -> list[tuple[int, str, FetchRequest]]:
         if mode == "static":
             return [(0, "bare", request)]
         steps: list[tuple[int, str, FetchRequest]] = [(0, "bare", request)]
@@ -121,6 +135,12 @@ class SmartRouter:
             steps.append((3, "tls", faked))
         if self.browser_engine is not None:
             steps.append((4, "browser", request))
+        if start_level > 0:
+            # 策略学习：跳过历史已验证无效的低层级
+            steps = [s for s in steps if s[0] >= start_level]
+            if not steps:  # 起始层引擎未配置时回退全链路
+                log.info("memory_step_unavailable", url=request.url, start_level=start_level)
+                steps = [(0, "bare", request), (1, "faked_headers", faked)]
         return steps
 
     async def _try_step(

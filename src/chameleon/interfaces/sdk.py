@@ -57,11 +57,13 @@ class Chameleon:
         self.proxy_manager = ProxyManager(self.settings.proxy)
         self.llm: LLMExtractor | None = None
 
+        self.memory = StrategyMemory()
         self.router = SmartRouter(
             self.http_engine,
             browser_engine=self.browser_engine,
             tls_engine=self.tls_engine,
             captcha_router=self.captcha,
+            memory=self.memory,
             identity_faker=self.identity,
             proxy_manager=self.proxy_manager,
             max_retries=self.settings.engine.max_retries,
@@ -69,7 +71,6 @@ class Chameleon:
         self.pipeline = Pipeline(llm=self.llm, default_max_tokens=8000)
         self.cache = CacheLayer()
         self.metrics = Metrics()
-        self.memory = StrategyMemory()
         self.api_engine = ApiEngine(self.http_engine)
         self.robots = RobotsTxt()
         self.crawler = DeepCrawler(
@@ -140,7 +141,6 @@ class Chameleon:
         )
         if result.status.value == "success":
             self.cache.set_raw(cache_key, result)
-            self.memory.remember(url, raw.escalation_level)
         return result
 
     async def call_api(

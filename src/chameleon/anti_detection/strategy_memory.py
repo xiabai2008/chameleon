@@ -39,6 +39,12 @@ class StrategyMemory:
                 return None
             return level
 
+    def forget(self, url: str) -> None:
+        """清除域名记忆（全链路失败时调用，下次重新探测）。"""
+        domain = hostname(url)
+        with self._lock:
+            self._store.pop(domain, None)
+
     def clear(self) -> None:
         with self._lock:
             self._store.clear()
