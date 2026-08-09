@@ -57,6 +57,43 @@ CAPTCHA_PAGE = """<!DOCTYPE html>
 LONG_PAGE_BODY = "\n".join(f"<p>段落{idx}: 用于测试长页面内容的填充文字，重复扩充长度以便验证清理与转换逻辑。</p>" for idx in range(30))
 
 
+PRODUCTS_HTML = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>产品列表</title></head>
+<body>
+<h1>全部产品</h1>
+<ul class="products">
+  <li class="product">
+    <h2 class="name">智能手表 Pro</h2>
+    <span class="price">¥1299</span>
+    <a class="buy" href="/product/1">购买</a>
+  </li>
+  <li class="product">
+    <h2 class="name">无线耳机 Max</h2>
+    <span class="price">¥899</span>
+    <a class="buy" href="/product/2">购买</a>
+  </li>
+  <li class="product">
+    <h2 class="name">便携充电宝 20000mAh</h2>
+    <span class="price">¥199</span>
+    <a class="buy" href="/product/3">购买</a>
+  </li>
+  <li class="product">
+    <h2 class="name">机械键盘 K87</h2>
+    <span class="price">¥459</span>
+    <a class="buy" href="/product/4">购买</a>
+  </li>
+  <li class="product">
+    <h2 class="name">显示器 27寸 4K</h2>
+    <span class="price">¥2499</span>
+    <a class="buy" href="/product/5">购买</a>
+  </li>
+</ul>
+<script>var track = "should be removed";</script>
+</body></html>
+"""
+
+
 def create_test_app() -> FastAPI:
     app = FastAPI()
 
@@ -99,6 +136,10 @@ def create_test_app() -> FastAPI:
     @app.get("/long")
     async def long_page() -> HTMLResponse:
         return HTMLResponse(f"<html><head><title>长页面</title></head><body>{LONG_PAGE_BODY}</body></html>")
+
+    @app.get("/products")
+    async def products() -> HTMLResponse:
+        return HTMLResponse(PRODUCTS_HTML)
 
     @app.get("/gzip")
     async def gzip_page() -> Response:
