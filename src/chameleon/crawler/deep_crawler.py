@@ -55,7 +55,7 @@ class DeepCrawler:
         if strategy == "dfs":
             return [(seed, 0)]
         if strategy == "adaptive":
-            return []  # heapq 元素 (depth, url)
+            return [(0, seed)]  # heapq 元素 (depth, url)
         return deque([(seed, 0)])
 
     def _strategy_push(self, strategy: str, queue: Any, url: str, depth: int) -> None:

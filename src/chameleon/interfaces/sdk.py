@@ -11,7 +11,7 @@ from chameleon.anti_detection.proxy_manager import ProxyManager
 from chameleon.anti_detection.strategy_memory import StrategyMemory
 from chameleon.core.config import Settings
 from chameleon.core.exceptions import ChameleonError
-from chameleon.core.models import CrawlJob, FetchRequest, ScrapeResult
+from chameleon.core.models import CrawlJob, EngineType, FetchRequest, ScrapeMetadata, ScrapeResult
 from chameleon.core.router import SmartRouter
 from chameleon.crawler.deep_crawler import DeepCrawler
 from chameleon.crawler.robots import RobotsTxt
@@ -111,15 +111,24 @@ class Chameleon:
             if isinstance(cached, ScrapeResult):
                 return cached
             return ScrapeResult.model_validate(cached)
-        raw = await self.router.fetch(
-            FetchRequest(
+        try:
+            raw = await self.router.fetch(
+                FetchRequest(
+                    url=url,
+                    wait_for=wait_for,
+                    timeout=timeout_seconds,
+                    headers=self.identity.generate_headers(url),
+                ),
+                mode=mode,
+            )
+        except ChameleonError as exc:
+            return ScrapeResult(
+                status=exc.status,
                 url=url,
-                wait_for=wait_for,
-                timeout=timeout_seconds,
-                headers=self.identity.generate_headers(url),
-            ),
-            mode=mode,
-        )
+                metadata=ScrapeMetadata(url=url, engine=EngineType.HTTP, retries=self.settings.engine.max_retries),
+                error=str(exc),
+                suggested_action=exc.suggested_action,
+            )
         selected_strategy = "llm" if extract_prompt else strategy
         result = await self.pipeline.process(
             raw,

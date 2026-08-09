@@ -1,7 +1,8 @@
-"""HTTP 引擎：httpx async，编码检测、超时、异常映射。"""
+"""HTTP 引擎：httpx async，编码检测、超时、异常映射、跨 loop 安全。"""
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 import httpx
@@ -24,27 +25,42 @@ class HttpEngine(BaseEngine):
 
     def __init__(self, *, timeout: float = DEFAULT_TIMEOUT, client: httpx.AsyncClient | None = None) -> None:
         self._timeout = timeout
-        self._client = client or httpx.AsyncClient(
-            timeout=httpx.Timeout(timeout),
+        self._client = client or self._new_client()
+        self._client_loop: asyncio.AbstractEventLoop | None = None
+        self._proxy_clients: dict[str, httpx.AsyncClient] = {}
+        self._proxy_loops: dict[str, asyncio.AbstractEventLoop] = {}
+
+    def _new_client(self, *, proxy: str | None = None) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            timeout=httpx.Timeout(self._timeout),
             follow_redirects=True,
             http2=True,
             headers={"Accept-Encoding": "gzip, deflate, br"},
+            proxy=proxy,
         )
-        self._proxy_clients: dict[str, httpx.AsyncClient] = {}
+
+    def _ensure_loop(self) -> None:
+        """httpx client 连接池绑定创建时的 loop；跨 loop 复用会报 'Event loop is closed'。
+        检测到 loop 变化时重建 client。"""
+        current = asyncio.get_running_loop()
+        if self._client_loop is not current:
+            if self._client_loop is not None:
+                self._client = self._new_client()
+            self._client_loop = current
+        for proxy, loop in list(self._proxy_loops.items()):
+            if loop is not current:
+                self._proxy_clients.pop(proxy, None)
+                self._proxy_loops.pop(proxy, None)
 
     def _client_for(self, proxy: str | None) -> httpx.AsyncClient:
+        self._ensure_loop()
         if proxy is None:
             return self._client
         client = self._proxy_clients.get(proxy)
         if client is None:
-            client = httpx.AsyncClient(
-                timeout=httpx.Timeout(self._timeout),
-                follow_redirects=True,
-                http2=True,
-                proxy=proxy,
-                headers={"Accept-Encoding": "gzip, deflate, br"},
-            )
+            client = self._new_client(proxy=proxy)
             self._proxy_clients[proxy] = client
+            self._proxy_loops[proxy] = asyncio.get_running_loop()
         return client
 
     async def fetch(self, request: FetchRequest) -> FetchResult:

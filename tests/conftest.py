@@ -48,6 +48,28 @@ def anti_bot_server() -> AsyncIterator[str]:
     yield ANTI_BOT_URL
 
 
+@pytest.fixture(scope="module")
+def cli_server() -> Iterator[str]:
+    """同步测试（CLI）用服务器，独立端口避免与 test_server 冲突。"""
+    thread = _ServerThread(create_test_app(), 8767)
+    thread.start()
+    _wait_ready_sync(8767)
+    yield "http://127.0.0.1:8767"
+
+
+def _wait_ready_sync(port: int) -> None:
+    import time
+    import urllib.request
+
+    for _ in range(100):
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/short", timeout=0.5)
+            return
+        except Exception:
+            time.sleep(0.05)
+    raise RuntimeError("test server did not start")
+
+
 async def _server_wait_ready(port: int) -> None:
     async with httpx.AsyncClient(timeout=0.5) as client:
         for _ in range(100):

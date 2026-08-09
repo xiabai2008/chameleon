@@ -12,8 +12,12 @@ _request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("chamel
 
 
 def configure_logging(*, level: str = "INFO", json_output: bool = False) -> None:
-    """全局配置 structlog。json_output=True 时输出 JSON（生产），否则彩色控制台。"""
-    logging.basicConfig(format="%(message)s", stream=sys.stdout, level=level.upper())
+    """全局配置 structlog。日志走 stderr（数据输出走 stdout），json_output=True 时 JSON 格式。"""
+    logging.basicConfig(format="%(message)s", stream=sys.stderr, level=level.upper())
+    # 静音 httpx 请求级日志（避免污染数据输出）
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
     processors: list[structlog.typing.Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
@@ -29,6 +33,7 @@ def configure_logging(*, level: str = "INFO", json_output: bool = False) -> None
     structlog.configure(
         processors=processors,
         wrapper_class=structlog.make_filtering_bound_logger(int(getattr(logging, level.upper(), 20))),
+        logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
 

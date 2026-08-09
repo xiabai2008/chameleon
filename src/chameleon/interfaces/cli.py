@@ -32,7 +32,7 @@ def _get_service() -> Chameleon:
 def _print_result(result: object, as_json: bool) -> None:
     data: dict[str, Any] = result.model_dump() if hasattr(result, "model_dump") else {}
     if as_json:
-        console.print(json.dumps(data, ensure_ascii=False, indent=2))
+        console.print(json.dumps(data, ensure_ascii=False, indent=2, default=str), soft_wrap=True)
         return
     status = data.get("status")
     if status != "success":

@@ -33,10 +33,8 @@ def get_service() -> Chameleon:
 
 
 def get_guard() -> SSRFGuard:
-    global _guard
-    if _guard is None:
-        _guard = SSRFGuard()
-    return _guard
+    """每次创建（无状态），读取最新 Settings（测试可用 env 覆盖）。"""
+    return SSRFGuard(Settings().security)
 
 
 def _check_rate_limit(key: str) -> None:
