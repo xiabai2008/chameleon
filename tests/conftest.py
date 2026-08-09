@@ -11,10 +11,13 @@ import pytest
 import uvicorn
 from fastapi import FastAPI
 
+from tests.fixtures.anti_bot_site import create_anti_bot_app
 from tests.fixtures.site import create_test_app
 
 TEST_PORT = 8765
 BASE_URL = f"http://127.0.0.1:{TEST_PORT}"
+ANTI_BOT_PORT = 8766
+ANTI_BOT_URL = f"http://127.0.0.1:{ANTI_BOT_PORT}"
 
 
 class _ServerThread(threading.Thread):
@@ -32,15 +35,24 @@ def test_server() -> AsyncIterator[str]:
     """会话级测试站点服务器，返回 BASE_URL。"""
     thread = _ServerThread(create_test_app(), TEST_PORT)
     thread.start()
-    asyncio.run(_server_wait_ready())
+    asyncio.run(_server_wait_ready(TEST_PORT))
     yield BASE_URL
 
 
-async def _server_wait_ready() -> None:
+@pytest.fixture(scope="session")
+def anti_bot_server() -> AsyncIterator[str]:
+    """反爬模拟站，返回 ANTI_BOT_URL。"""
+    thread = _ServerThread(create_anti_bot_app(), ANTI_BOT_PORT)
+    thread.start()
+    asyncio.run(_server_wait_ready(ANTI_BOT_PORT))
+    yield ANTI_BOT_URL
+
+
+async def _server_wait_ready(port: int) -> None:
     async with httpx.AsyncClient(timeout=0.5) as client:
         for _ in range(100):
             try:
-                await client.get(f"http://127.0.0.1:{TEST_PORT}/short")
+                await client.get(f"http://127.0.0.1:{port}/short")
                 return
             except Exception:
                 await asyncio.sleep(0.05)

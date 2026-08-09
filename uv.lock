@@ -405,6 +405,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
+    { name = "redis" },
     { name = "structlog" },
 ]
 
@@ -477,6 +478,7 @@ requires-dist = [
     { name = "python-multipart", marker = "extra == 'rest'", specifier = ">=0.0.9" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "readability-lxml", marker = "extra == 'extract'", specifier = ">=0.8" },
+    { name = "redis", specifier = ">=5.3.1" },
     { name = "redis", marker = "extra == 'proxy'", specifier = ">=5.0" },
     { name = "redis", marker = "extra == 'queue'", specifier = ">=5.0" },
     { name = "selectolax", marker = "extra == 'extract'", specifier = ">=0.3.21" },

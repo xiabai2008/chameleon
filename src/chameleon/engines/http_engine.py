@@ -50,8 +50,10 @@ class HttpEngine(BaseEngine):
     async def fetch(self, request: FetchRequest) -> FetchResult:
         started = time.perf_counter()
         client = self._client_for(request.proxy)
-        headers = dict(client.headers)
-        headers.update(request.headers)
+        # httpx.Headers 大小写不敏感：request.headers 能正确覆盖 client 默认头（如 user-agent）
+        headers = httpx.Headers(client.headers)
+        for key, value in request.headers.items():
+            headers[key] = value
         try:
             resp = await client.get(
                 request.url,
@@ -78,10 +80,13 @@ class HttpEngine(BaseEngine):
             response_time_ms=elapsed_ms,
         )
         if resp.status_code == 403 or resp.status_code == 429:
-            raise BlockedError(f"blocked with status {resp.status_code}")
+            raise BlockedError(f"blocked with status {resp.status_code}", status_code=resp.status_code)
         if resp.status_code >= 400:
             raise RetryableError(f"http {resp.status_code} for {request.url}")
         return result
+
+    async def clear_cookies(self) -> None:
+        self._client.cookies.clear()
 
     async def close(self) -> None:
         await self._client.aclose()

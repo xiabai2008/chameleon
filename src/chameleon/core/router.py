@@ -1,4 +1,4 @@
-"""智能路由器：按内容质量自动选择/升级采集策略（方案 5.1）。"""
+"""智能路由器：按内容质量自动选择/升级采集策略（方案 5.1 + 7 升级链）。"""
 
 from __future__ import annotations
 
@@ -6,76 +6,175 @@ import asyncio
 import random
 import time
 
+from chameleon.anti_detection.identity_faker import IdentityFaker
+from chameleon.anti_detection.proxy_manager import ProxyManager
 from chameleon.core.content_validator import ContentValidator
-from chameleon.core.exceptions import ChameleonError, NotReachableError, ScrapeStatus
+from chameleon.core.exceptions import BlockedError, ChameleonError, NotReachableError, ScrapeStatus
 from chameleon.core.models import (
+    EngineType,
     FetchRequest,
     FetchResult,
     ScrapeMetadata,
     ScrapeResult,
 )
 from chameleon.engines.base import BaseEngine
+from chameleon.engines.http_engine import HttpEngine
 from chameleon.infra.logging import get_logger
+from chameleon.infra.session_pool import SessionPool
+from chameleon.utils.url_utils import hostname
 
 log = get_logger("router")
 
-_FAIL_REASONS = {"blocked_status_403", "blocked_status_429", "content_too_short", "anti_bot_marker"}
-
-
-def _is_escalatable(reason: str | None) -> bool:
-    return reason in _FAIL_REASONS
+_ESCALATABLE_REASONS = {"blocked_status_403", "blocked_status_429", "content_too_short", "anti_bot_marker"}
 
 
 class SmartRouter:
-    """决策链：HTTP（裸）→ HTTP（stealth，P2 接入）→ Browser。
+    """决策链（方案 6 级升级链的 P1/P2 子集）：
 
-    escalation_level 对应方案 6 级升级链中的"最高到达层级"：
     Level 0: HTTP 裸请求
-    Level 4: Browser 渲染
-    （P2/P4 将补齐 Level 1-3、5-6）
+    Level 1: HTTP + 自定义 UA + 完整请求头
+    Level 2: HTTP + UA 轮换 + 代理 + 完整请求头
+    Level 4: Browser + stealth + 代理
+    （P4 将插入 Level 3: TLS 伪装；Level 5: 行为模拟；Level 6: 验证码）
     """
 
     def __init__(
         self,
-        http_engine: BaseEngine,
+        http_engine: HttpEngine,
         browser_engine: BaseEngine | None = None,
         *,
         validator: ContentValidator | None = None,
+        identity_faker: IdentityFaker | None = None,
+        proxy_manager: ProxyManager | None = None,
+        session_pool: SessionPool | None = None,
         max_retries: int = 3,
     ) -> None:
         self.http_engine = http_engine
         self.browser_engine = browser_engine
         self.validator = validator or ContentValidator()
+        self.identity = identity_faker or IdentityFaker()
+        self.proxy_manager = proxy_manager
+        self.session_pool = session_pool
         self.max_retries = max_retries
 
     async def fetch(self, request: FetchRequest, *, mode: str = "auto", force_browser: bool = False) -> FetchResult:
         """执行带升级链的采集，返回最终 FetchResult。
 
-        mode: auto（自动决策）| static（仅 HTTP）| dynamic（仅 Browser）
+        mode: auto（逐级升级）| static（仅 HTTP 裸请求）| dynamic（仅 Browser）
         """
         if force_browser or mode == "dynamic":
-            if self.browser_engine is None:
-                raise NotReachableError("browser engine not configured")
-            return await self.browser_engine.fetch(request)
+            return await self._require_browser().fetch(request)
 
-        result = await self._fetch_with_retry(self.http_engine, request)
+        if mode == "static":
+            # static 语义：仅 HTTP 裸请求（带重试），不做内容质量升级
+            result = await self._fetch_with_retry(self.http_engine, request)
+            result.escalation_level = 0
+            return result
+
+        steps = self._build_steps(request, mode)
+        last_result: FetchResult | None = None
+        last_reason: str | None = None
+        for level, label, step_request in steps:
+            result, ok, reason = await self._try_step(level, label, step_request)
+            last_result, last_reason = result, reason
+            if ok:
+                return result
+            log.info("step_failed", url=request.url, level=level, label=label, reason=reason)
+
+        assert last_result is not None
+        # 最后一步是被反爬拦截（403/429）时，报告为 BlockedError 而非不可达
+        if last_result.status_code in (403, 429):
+            raise BlockedError(
+                f"blocked for {request.url} (status {last_result.status_code})",
+                status_code=last_result.status_code,
+            )
+        raise NotReachableError(
+            f"all strategies failed for {request.url} (last reason: {last_reason})"
+        )
+
+    def _build_steps(self, request: FetchRequest, mode: str) -> list[tuple[int, str, FetchRequest]]:
+        if mode == "static":
+            return [(0, "bare", request)]
+        steps: list[tuple[int, str, FetchRequest]] = [(0, "bare", request)]
+        faked_headers = {**request.headers, **self.identity.generate_headers(request.url)}
+        steps.append((1, "faked_headers", request.model_copy(update={"headers": faked_headers})))
+        if self.proxy_manager is not None:
+            steps.append((2, "proxy+ua", request.model_copy(update={"headers": faked_headers})))
+        if self.browser_engine is not None:
+            steps.append((4, "browser", request))
+        return steps
+
+    async def _try_step(
+        self, level: int, label: str, request: FetchRequest
+    ) -> tuple[FetchResult, bool, str | None]:
+        engine: BaseEngine = self.http_engine
+        try:
+            if level == 0:
+                result = await self._fetch_with_retry(engine, request)
+            elif level == 1:
+                engine = await self._session_for(request)
+                result = await self._fetch_with_retry(engine, request)
+            elif level == 2:
+                engine = await self._session_for(request)
+                proxy = await self._acquire_proxy()
+                if proxy is None:
+                    return FetchResult(url=request.url, engine=EngineType.HTTP, error="no proxy"), False, "no_proxy"
+                result = await self._fetch_with_retry(engine, request.model_copy(update={"proxy": proxy}))
+                if result.proxy_used:
+                    await self._mark_proxy_success(proxy)
+            else:
+                engine = self._require_browser()
+                result = await self._fetch_with_retry(engine, request)
+        except ChameleonError as exc:
+            if level == 2 and request.proxy:
+                await self._mark_proxy_failed(request.proxy)
+            if level >= 1 and self.session_pool is not None and isinstance(engine, HttpEngine):
+                await self.session_pool.mark_blocked(engine)
+            return (
+                FetchResult(
+                    url=request.url,
+                    engine=engine.name,
+                    error=str(exc),
+                    status_code=getattr(exc, "status_code", None),
+                ),
+                False,
+                exc.suggested_action,
+            )
+
         valid, reason = self.validator.is_valid(result)
-        should_escalate = False
-        if valid:
-            should_escalate = self.validator.is_js_shell(result)
-            if should_escalate:
-                reason = "js_shell"
-        else:
-            should_escalate = _is_escalatable(reason)
+        js_shell = valid and self.validator.is_js_shell(result)
+        if valid and not js_shell:
+            result.escalation_level = level
+            return result, True, None
+        if js_shell and level < 4 and self.browser_engine is not None:
+            reason = "js_shell"
+        return result, False, reason or "invalid"
 
-        if should_escalate and mode == "auto" and self.browser_engine is not None:
-            log.info("escalating_to_browser", url=request.url, reason=reason)
-            browser_result = await self._fetch_with_retry(self.browser_engine, request)
-            browser_result = self._apply_escalation_metadata(browser_result, 4)
-            return browser_result
+    async def _session_for(self, request: FetchRequest) -> BaseEngine:
+        if self.session_pool is None:
+            return self.http_engine
+        return await self.session_pool.acquire(hostname(request.url))
 
-        result = self._apply_escalation_metadata(result, 0)
-        return result
+    async def _acquire_proxy(self) -> str | None:
+        if self.proxy_manager is None:
+            return None
+        try:
+            return await self.proxy_manager.get()
+        except ChameleonError:
+            return None
+
+    async def _mark_proxy_failed(self, proxy: str) -> None:
+        if self.proxy_manager is not None:
+            await self.proxy_manager.mark_failed(proxy)
+
+    async def _mark_proxy_success(self, proxy: str) -> None:
+        if self.proxy_manager is not None:
+            await self.proxy_manager.mark_success(proxy)
+
+    def _require_browser(self) -> BaseEngine:
+        if self.browser_engine is None:
+            raise NotReachableError("browser engine not configured")
+        return self.browser_engine
 
     async def scrape(
         self,
@@ -148,9 +247,3 @@ class SmartRouter:
                     await asyncio.sleep(backoff)
         assert last_error is not None
         raise last_error
-
-    @staticmethod
-    def _apply_escalation_metadata(result: FetchResult, level: int) -> FetchResult:
-        result.escalation_level = level
-        result.retries = 0
-        return result

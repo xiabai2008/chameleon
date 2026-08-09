@@ -46,6 +46,17 @@ class BlockedError(ChameleonError):
     status = ScrapeStatus.RATE_LIMITED
     suggested_action = "switch_proxy_or_escalate"
 
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        status_code: int | None = None,
+        status: ScrapeStatus | None = None,
+        suggested_action: str | None = None,
+    ) -> None:
+        super().__init__(message, status=status, suggested_action=suggested_action)
+        self.status_code = status_code
+
 
 class ContentInvalidError(ChameleonError):
     """HTTP 200 但内容为反爬/空壳/假内容。"""

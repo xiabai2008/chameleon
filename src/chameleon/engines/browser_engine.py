@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
+from chameleon.anti_detection.stealth import StealthPlugin
 from chameleon.core.exceptions import BlockedError, NotReachableError
 from chameleon.core.models import EngineType, FetchRequest, FetchResult
 from chameleon.engines.base import BaseEngine
@@ -22,9 +23,10 @@ DEFAULT_USER_AGENT = (
 class BrowserContextPool:
     """预创建 N 个隔离 context 供并发任务借用/归还。"""
 
-    def __init__(self, pool_size: int = 2, headless: bool = True) -> None:
+    def __init__(self, pool_size: int = 2, headless: bool = True, *, stealth: StealthPlugin | None = None) -> None:
         self._size = pool_size
         self._headless = headless
+        self._stealth = stealth
         self._browser: Browser | None = None
         self._contexts: list[BrowserContext] = []
         self._semaphore: asyncio.Semaphore | None = None
@@ -39,12 +41,15 @@ class BrowserContextPool:
             args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
         )
         for _ in range(self._size):
-            self._contexts.append(await self._browser.new_context(
+            context = await self._browser.new_context(
                 viewport={"width": 1920, "height": 1080},
                 user_agent=DEFAULT_USER_AGENT,
                 locale="zh-CN",
                 timezone_id="Asia/Shanghai",
-            ))
+            )
+            if self._stealth is not None:
+                await self._stealth.apply(context)
+            self._contexts.append(context)
 
     @asynccontextmanager
     async def borrow(self) -> AsyncIterator[BrowserContext]:
@@ -73,8 +78,9 @@ class BrowserEngine(BaseEngine):
 
     name = EngineType.BROWSER
 
-    def __init__(self, *, pool_size: int = 2, headless: bool = True, timeout: float = 45.0) -> None:
+    def __init__(self, pool_size: int = 2, headless: bool = True, timeout: float = 45.0) -> None:
         self.pool = BrowserContextPool(pool_size=pool_size, headless=headless)
+        self.stealth = StealthPlugin(enabled=True)
         self._timeout = timeout
 
     async def _goto(self, ctx: BrowserContext, request: FetchRequest) -> FetchResult:
@@ -110,7 +116,7 @@ class BrowserEngine(BaseEngine):
             response_time_ms=elapsed_ms,
         )
         if status_code == 403 or status_code == 429:
-            raise BlockedError(f"browser blocked with status {status_code}")
+            raise BlockedError(f"browser blocked with status {status_code}", status_code=status_code)
         return result
 
     async def fetch(self, request: FetchRequest) -> FetchResult:
