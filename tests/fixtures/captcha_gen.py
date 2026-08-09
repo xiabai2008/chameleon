@@ -12,27 +12,14 @@ WIDTH, HEIGHT = 120, 40
 TEMPLATE_SIZE = (28, 40)
 
 
-def _find_font(size: int) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
-    """优先使用系统字体，回退默认字体。"""
-    candidates = [
-        "C:/Windows/Fonts/arial.ttf",
-        "C:/Windows/Fonts/arialbd.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    ]
-    for path in candidates:
-        if Path(path).exists():
-            return ImageFont.truetype(path, size)
-    return ImageFont.load_default()
-
-
-_FONT = None
+_FONT: ImageFont.ImageFont | ImageFont.FreeTypeFont | None = None
 
 
 def _font() -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
     global _FONT
     if _FONT is None:
-        _FONT = _find_font(24)
+        # Pillow 内置可缩放字体（Aileron）：跨平台确定性，无需外部字体文件
+        _FONT = ImageFont.load_default(size=24)
     return _FONT
 
 
