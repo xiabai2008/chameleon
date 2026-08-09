@@ -6,6 +6,7 @@ import asyncio
 
 import pytest
 
+from chameleon.core.models import FetchRequest
 from chameleon.core.router import SmartRouter
 from chameleon.crawler.deep_crawler import DeepCrawler
 from chameleon.crawler.rate_limiter import RateLimiter, TokenBucket
@@ -174,3 +175,56 @@ async def test_rate_limiter_serializes_domain(test_server: str) -> None:
 
     await asyncio.gather(*[worker(i) for i in range(6)])
     assert len(order) == 6
+
+
+@pytest.mark.asyncio
+async def test_incremental_crawl_etag_304(test_server: str) -> None:
+    """增量采集：第二次爬取携带 If-None-Match → 304 跳过，请求数不重复。"""
+
+    http = HttpEngine()
+    router = SmartRouter(http_engine=http)
+    crawler = DeepCrawler(
+        router,
+        Pipeline(),
+        url_filter=UrlFilter(allow_domains=["127.0.0.1"]),
+        respect_robots=False,
+        incremental=True,
+    )
+    # 第一次：全量
+    first: list[str] = []
+    async for result in crawler.crawl(f"{test_server}/etag", max_pages=2, max_depth=1, strategy="bfs"):
+        first.append(result.url)
+    assert len(first) == 1
+    # 第二次：同一 URL 应命中 304（无新结果产出，但请求带条件头）
+    second: list[str] = []
+    async for result in crawler.crawl(f"{test_server}/etag", max_pages=2, max_depth=1, strategy="bfs"):
+        second.append(result.url)
+    assert len(second) == 0  # 304 → 无内容产出
+    assert crawler._etags.get(f"{test_server}/etag") is not None  # noqa: SLF001
+    await http.close()
+
+
+@pytest.mark.asyncio
+async def test_incremental_etag_headers_sent(test_server: str) -> None:
+    """条件头正确发送：第二次请求 If-None-Match 生效。"""
+    import httpx
+    from tests.fixtures.site import ETAG_VALUE
+
+    async with httpx.AsyncClient() as client:
+        await client.get(f"{test_server}/etag")  # 首次拉取（记录服务端状态）
+
+    http = HttpEngine()
+    router = SmartRouter(http_engine=http)
+    crawler = DeepCrawler(
+        router,
+        Pipeline(),
+        url_filter=UrlFilter(allow_domains=["127.0.0.1"]),
+        respect_robots=False,
+        incremental=True,
+    )
+    async for _ in crawler.crawl(f"{test_server}/etag", max_pages=1, max_depth=1, strategy="bfs"):
+        pass
+    # 第二次：应发 If-None-Match 且拿到 304
+    raw = await http.fetch(FetchRequest(url=f"{test_server}/etag", headers={"If-None-Match": ETAG_VALUE}))
+    assert raw.status_code == 304
+    await http.close()

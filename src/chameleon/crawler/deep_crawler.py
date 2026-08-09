@@ -48,7 +48,7 @@ class DeepCrawler:
         self.deduplicator = deduplicator
         self.respect_robots = respect_robots
         self.incremental = incremental
-        self._etags: dict[str, str] = {}
+        self._etags: dict[str, tuple[str, str]] = {}
 
     def _strategy_queue(self, strategy: str, seed: str) -> Any:
         """BFS（deque）/ DFS（list 栈）/ Adaptive（heapq 优先队列）。"""
@@ -100,8 +100,22 @@ class DeepCrawler:
 
             async with self.rate_limiter as limiter:
                 await limiter.acquire(hostname(url))
+                request = FetchRequest(url=url)
+                # 增量采集：携带上次 ETag/Last-Modified 条件头
+                if self.incremental:
+                    conditional = self._etags.get(url)
+                    if conditional:
+                        etag, last_modified = conditional
+                        if etag:
+                            request.headers["If-None-Match"] = etag
+                        if last_modified:
+                            request.headers["If-Modified-Since"] = last_modified
                 try:
-                    raw = await self.router.fetch(FetchRequest(url=url))
+                    raw = await self.router.fetch(request)
+                    if raw.status_code == 304:
+                        log.info("not_modified_304", url=url)
+                        visited.add(url)
+                        continue
                     result = await self.pipeline.process(raw, output_format=output_format)
                 except Exception as exc:
                     attempts[url] = attempts.get(url, 0) + 1
@@ -115,7 +129,7 @@ class DeepCrawler:
             visited.add(url)
             crawled += 1
             if self.incremental:
-                self._remember_etag(raw.headers)
+                self._remember_etag(url, raw.headers)
             # 链接发现始终执行（即使内容判重，页面链接也要继续遍历）
             for link in result.links:
                 if link in visited or link in seen_queued:
@@ -144,10 +158,11 @@ class DeepCrawler:
         bfs_item: tuple[str, int] = queue.popleft()
         return bfs_item
 
-    def _remember_etag(self, headers: dict[str, str]) -> None:
+    def _remember_etag(self, url: str, headers: dict[str, str]) -> None:
         etag = headers.get("etag")
-        if etag:
-            self._etags[etag] = etag
+        last_modified = headers.get("last-modified")
+        if etag or last_modified:
+            self._etags[url] = (etag or "", last_modified or "")
 
     async def close(self) -> None:
         await self.robots.close()

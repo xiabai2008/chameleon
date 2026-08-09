@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
 STATIC_PAGE = """<!DOCTYPE html>
@@ -177,6 +177,10 @@ def _site_links(page: str) -> str:
     return "\n".join(links)
 
 
+ETAG_VALUE = '"chameleon-test-etag-v1"'
+_etag_requests: list[str] = []
+
+
 def create_test_app() -> FastAPI:
     app = FastAPI()
 
@@ -241,6 +245,20 @@ def create_test_app() -> FastAPI:
         if page not in SITE_PAGES:
             return Response(content="<html><body>404</body></html>", status_code=404)
         return HTMLResponse(SITE_PAGE_TEMPLATE.format(page=page, links=_site_links(page)))
+
+    @app.get("/etag")
+    async def etag_page(request: Request) -> Response:
+        _etag_requests.append(request.headers.get("if-none-match", ""))
+        if request.headers.get("if-none-match") == ETAG_VALUE:
+            return Response(status_code=304)
+        return Response(
+            content="<html><head><title>ETag 页面</title></head><body><h1>ETag 测试</h1><p>内容足够长用于通过内容校验器的最小长度阈值，包含多个完整句子模拟真实页面的信息密度，继续补充文字以确保校验通过。Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. 中文段落继续补充以保证长度达标。</p></body></html>",
+            headers={"ETag": ETAG_VALUE},
+        )
+
+    @app.get("/etag-count")
+    async def etag_count() -> dict[str, int]:
+        return {"requests": len(_etag_requests)}
 
     @app.get("/robots.txt")
     async def robots() -> PlainTextResponse:

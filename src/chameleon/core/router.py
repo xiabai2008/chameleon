@@ -170,6 +170,10 @@ class SmartRouter:
             )
 
         valid, reason = self.validator.is_valid(result)
+        # 304 Not Modified：内容未变化（增量采集），直接返回不再升级
+        if result.status_code == 304:
+            result.escalation_level = level
+            return result, True, None
         _metrics.observe_escalation(level)
         _metrics.record_request(engine=engine.name, status="ok" if valid else "invalid")
         # 验证码检测（L6）：内容含验证码特征 → 尝试解决，失败上报
