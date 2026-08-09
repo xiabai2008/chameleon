@@ -49,7 +49,7 @@ def _parse_table(table: Node) -> dict[str, Any] | None:
         all_rows = all_rows[1:]
 
     if headers and len(all_rows) >= 1 and len(all_rows[0]) == len(headers):
-        rows = [dict(zip(headers, row)) for row in all_rows]
+        rows = [dict(zip(headers, row, strict=False)) for row in all_rows]
         return {"headers": headers, "rows": rows}
     return {"headers": headers or [], "rows": all_rows}
 
