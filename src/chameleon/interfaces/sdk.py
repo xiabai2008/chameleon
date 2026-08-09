@@ -8,6 +8,7 @@ from typing import Any
 from chameleon.anti_detection.captcha_solver import CaptchaRouter
 from chameleon.anti_detection.identity_faker import IdentityFaker
 from chameleon.anti_detection.proxy_manager import ProxyManager
+from chameleon.anti_detection.strategy_memory import StrategyMemory
 from chameleon.core.config import Settings
 from chameleon.core.exceptions import ChameleonError
 from chameleon.core.models import CrawlJob, FetchRequest, ScrapeResult
@@ -15,6 +16,7 @@ from chameleon.core.router import SmartRouter
 from chameleon.crawler.deep_crawler import DeepCrawler
 from chameleon.crawler.robots import RobotsTxt
 from chameleon.crawler.scheduler import CrawlScheduler
+from chameleon.engines.api_engine import ApiEngine
 from chameleon.engines.browser_engine import BrowserEngine
 from chameleon.engines.http_engine import HttpEngine
 from chameleon.engines.tls_engine import TlsHttpEngine
@@ -67,6 +69,8 @@ class Chameleon:
         self.pipeline = Pipeline(llm=self.llm, default_max_tokens=8000)
         self.cache = CacheLayer()
         self.metrics = Metrics()
+        self.memory = StrategyMemory()
+        self.api_engine = ApiEngine(self.http_engine)
         self.robots = RobotsTxt()
         self.crawler = DeepCrawler(
             self.router,
@@ -127,7 +131,30 @@ class Chameleon:
         )
         if result.status.value == "success":
             self.cache.set_raw(cache_key, result)
+            self.memory.remember(url, raw.escalation_level)
         return result
+
+    async def call_api(
+        self,
+        url: str,
+        *,
+        method: str = "GET",
+        json_body: Any = None,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """直接调用内部 JSON API（P8-1）。"""
+        from chameleon.engines.api_engine import ApiEngine
+
+        engine = self.api_engine if isinstance(self.api_engine, ApiEngine) else ApiEngine(self.http_engine)
+        return await engine.call_json(url, method=method, json_body=json_body, headers=headers)
+
+    async def analyze_api_endpoints(self, url: str) -> list[dict[str, Any]]:
+        """采集页面网络日志并筛选候选 API 端点。"""
+        from chameleon.engines.api_engine import ApiDiscovery
+        from chameleon.utils.url_utils import hostname
+
+        log_data = await self.get_network_log(url, filter_type="all")
+        return ApiDiscovery.filter_api_entries(log_data, hostname(url))
 
     async def extract(self, url: str, schema: dict[str, Any], *, strategy: str = "auto") -> ScrapeResult:
         return await self.scrape(url, schema=schema, strategy=strategy, output_format="json")
@@ -180,8 +207,15 @@ class Chameleon:
                 await page.close()
         return f"data:image/png;base64,{b64.b64encode(shot).decode()}"
 
-    async def search_web(self, query: str, *, max_results: int = 5, language: str = "zh") -> list[dict[str, str]]:
-        """必应搜索：解析结果标题/链接/摘要（P8 将扩展多引擎）。"""
+    async def search_web(
+        self,
+        query: str,
+        *,
+        max_results: int = 5,
+        language: str = "zh",
+        provider: str = "auto",
+    ) -> list[dict[str, str]]:
+        """搜索互联网（必应/百度），返回结果标题/链接/摘要。"""
         import urllib.parse
 
         from selectolax.parser import HTMLParser
@@ -212,7 +246,39 @@ class Chameleon:
                 })
         except Exception:
             pass
-        return results
+        # 必应结果不足时回退百度
+        if len(results) < max_results and provider in ("auto", "baidu"):
+            results = self._search_baidu_fallback(query, max_results) or results
+        return results[:max_results]
+
+    @staticmethod
+    def _search_baidu_fallback(query: str, max_results: int) -> list[dict[str, str]]:
+        """百度搜索回退（独立 httpx 调用，失败返回空）。"""
+        import urllib.parse
+
+        from selectolax.parser import HTMLParser
+
+        try:
+            import httpx
+
+            url = f"https://www.baidu.com/s?wd={urllib.parse.urlencode({'wd': query})}"
+            resp = httpx.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}, timeout=10, follow_redirects=True)
+            if resp.status_code != 200:
+                return []
+            tree = HTMLParser(resp.text)
+            results: list[dict[str, str]] = []
+            for item in tree.css(".result")[:max_results]:
+                title_node = item.css_first("h3 a")
+                if title_node is None:
+                    continue
+                results.append({
+                    "title": title_node.text(strip=True),
+                    "url": title_node.attributes.get("href") or "",
+                    "snippet": "",
+                })
+            return results
+        except Exception:
+            return []
 
     async def get_network_log(self, url: str, *, filter_type: str = "xhr") -> list[dict[str, Any]]:
         """浏览器网络请求日志（CDP 拦截），用于内部 API 发现。"""

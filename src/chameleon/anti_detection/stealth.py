@@ -65,11 +65,16 @@ STEALTH_SCRIPT = """
 class StealthPlugin:
     """向 BrowserContext 注入反检测脚本。"""
 
-    def __init__(self, enabled: bool = True, script: str = STEALTH_SCRIPT) -> None:
+    def __init__(self, enabled: bool = True, script: str = STEALTH_SCRIPT, fingerprint: bool = False) -> None:
         self.enabled = enabled
         self.script = script
+        self.fingerprint = fingerprint
 
     async def apply(self, context: BrowserContext) -> None:
         if not self.enabled:
             return
         await context.add_init_script(self.script)
+        if self.fingerprint:
+            from chameleon.anti_detection.fingerprint import FingerprintRandomizer
+
+            await context.add_init_script(FingerprintRandomizer.script())
