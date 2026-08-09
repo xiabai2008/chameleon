@@ -16,6 +16,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "brotli>=1.2.0",
     "charset-normalizer>=3.3",
     "curl-cffi>=0.16.0",
     "ddddocr>=1.6.1",

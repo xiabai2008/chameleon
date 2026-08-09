@@ -111,8 +111,9 @@ class IdentityFaker:
         if url:
             host = urlparse(url).netloc
             if host:
+                # 注意：不设置 Host 头——httpx 自动维护，跟随重定向时会正确更新；
+                # 显式 Host 会在重定向后保持旧值，导致目标站返回降级页
                 headers["Referer"] = f"https://{host}/"
-                headers["Host"] = host
         if "Firefox" not in user_agent:
             headers["sec-ch-ua-full-version-list"] = (
                 '"Chromium";v="131.0.6778.86", "Not_A Brand";v="24.0.0.0", "Google Chrome";v="131.0.6778.86"'

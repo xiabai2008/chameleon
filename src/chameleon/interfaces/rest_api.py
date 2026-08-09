@@ -70,6 +70,11 @@ class SearchRequest(BaseModel):
     language: str = "zh"
 
 
+class ScreenshotRequest(BaseModel):
+    url: str
+    full_page: bool = False
+
+
 @app.post("/api/v1/scrape", dependencies=[Depends(_require_auth)])
 async def api_scrape(req: ScrapeRequest) -> dict[str, Any]:
     await get_guard().assert_safe(str(req.url))
@@ -120,10 +125,10 @@ async def api_batch(urls: list[str]) -> dict[str, Any]:
 
 
 @app.post("/api/v1/screenshot", dependencies=[Depends(_require_auth)])
-async def api_screenshot(url: str, full_page: bool = False) -> dict[str, Any]:
-    await get_guard().assert_safe(url)
-    data_uri = await get_service().get_screenshot(url, full_page=full_page)
-    return {"url": url, "screenshot_base64": data_uri}
+async def api_screenshot(req: ScreenshotRequest) -> dict[str, Any]:
+    await get_guard().assert_safe(req.url)
+    data_uri = await get_service().get_screenshot(req.url, full_page=req.full_page)
+    return {"url": req.url, "screenshot_base64": data_uri}
 
 
 @app.get("/api/v1/jobs/{job_id}", dependencies=[Depends(_require_auth)])

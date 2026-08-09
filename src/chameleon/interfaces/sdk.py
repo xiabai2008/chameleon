@@ -205,13 +205,13 @@ class Chameleon:
         """返回 base64 PNG data URI。"""
         import base64 as b64
 
-
         browser = self.browser_engine
         async with browser.pool.borrow() as ctx:
             page = await ctx.new_page()
             try:
-                await page.goto(url, wait_until="networkidle", timeout=45000)
-                shot = await page.screenshot(full_page=full_page)
+                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                await page.wait_for_timeout(1500)
+                shot = await page.screenshot(full_page=full_page, timeout=45000)
             finally:
                 await page.close()
         return f"data:image/png;base64,{b64.b64encode(shot).decode()}"
@@ -311,8 +311,8 @@ class Chameleon:
                     })
 
                 page.on("request", on_request)
-                await page.goto(url, wait_until="networkidle", timeout=45000)
-                await page.wait_for_timeout(1000)
+                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                await page.wait_for_timeout(1500)
             finally:
                 await page.close()
         return entries[:200]

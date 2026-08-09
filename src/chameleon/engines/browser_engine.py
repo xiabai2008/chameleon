@@ -40,7 +40,13 @@ class BrowserContextPool:
         pw = await async_playwright().start()
         self._browser = await pw.chromium.launch(
             headless=self._headless,
-            args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--disable-software-rasterizer",
+            ],
         )
         for _ in range(self._size):
             context = await self._browser.new_context(
