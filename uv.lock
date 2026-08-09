@@ -400,6 +400,8 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "charset-normalizer" },
+    { name = "curl-cffi" },
+    { name = "ddddocr" },
     { name = "httpx", extra = ["http2"] },
     { name = "lxml" },
     { name = "markdownify" },
@@ -467,7 +469,9 @@ dev = [
 requires-dist = [
     { name = "arq", marker = "extra == 'queue'", specifier = ">=0.26" },
     { name = "charset-normalizer", specifier = ">=3.3" },
+    { name = "curl-cffi", specifier = ">=0.16.0" },
     { name = "curl-cffi", marker = "extra == 'tls'", specifier = ">=0.7" },
+    { name = "ddddocr", specifier = ">=1.6.1" },
     { name = "ddddocr", marker = "extra == 'captcha'", specifier = ">=1.4.7" },
     { name = "fastapi", marker = "extra == 'rest'", specifier = ">=0.111" },
     { name = "httpx", extras = ["http2"], specifier = ">=0.27" },

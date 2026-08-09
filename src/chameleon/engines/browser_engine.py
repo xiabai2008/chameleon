@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
+from chameleon.anti_detection.behavior_simulator import BehaviorSimulator
 from chameleon.anti_detection.stealth import StealthPlugin
 from chameleon.core.exceptions import BlockedError, NotReachableError
 from chameleon.core.models import EngineType, FetchRequest, FetchResult
@@ -74,14 +75,68 @@ class BrowserContextPool:
 
 
 class BrowserEngine(BaseEngine):
-    """Playwright 渲染引擎，带 context 池与 wait_for 支持。"""
+    """Playwright 渲染引擎，带 context 池、wait_for、行为模拟、无限滚动、Shadow DOM 穿透。"""
 
     name = EngineType.BROWSER
 
-    def __init__(self, pool_size: int = 2, headless: bool = True, timeout: float = 45.0) -> None:
+    def __init__(
+        self,
+        pool_size: int = 2,
+        headless: bool = True,
+        timeout: float = 45.0,
+        *,
+        behavior: BehaviorSimulator | None = None,
+        infinite_scroll: bool = False,
+        extract_shadow: bool = False,
+    ) -> None:
         self.pool = BrowserContextPool(pool_size=pool_size, headless=headless)
         self.stealth = StealthPlugin(enabled=True)
+        self.behavior = behavior
+        self.infinite_scroll = infinite_scroll
+        self.extract_shadow = extract_shadow
         self._timeout = timeout
+
+    async def _scroll_to_load_more(self, page: Page) -> None:
+        """无限滚动：增量滚动直到内容不再增长（内容指纹去重）。"""
+        last_length = 0
+        for _ in range(15):
+            current = await page.evaluate("document.body.innerHTML.length")
+            if current <= last_length:
+                break
+            last_length = current
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await page.wait_for_timeout(600)
+
+    async def _content_with_shadow(self, page: Page) -> str:
+        """page.content() + Shadow DOM / iframe 文本穿透拼接。"""
+        main = await page.content()
+        shadow_texts: list[str] = await page.evaluate(
+            """
+            () => {
+              const results = [];
+              const collect = (root) => {
+                const shadowHosts = root.querySelectorAll('*');
+                shadowHosts.forEach(el => {
+                  if (el.shadowRoot) {
+                    results.push(el.shadowRoot.textContent || '');
+                    collect(el.shadowRoot);
+                  }
+                });
+              };
+              collect(document);
+              return results;
+            }
+            """
+        )
+        iframe_texts: list[str] = []
+        for frame in page.frames:
+            if frame != page.main_frame:
+                try:
+                    iframe_texts.append(await frame.evaluate("() => document.body ? document.body.innerText : ''"))
+                except Exception:
+                    continue
+        extra = "\n".join(t for t in [*shadow_texts, *iframe_texts] if t.strip())
+        return main + ("\n<!-- shadow/iframe content -->\n" + extra if extra else "")
 
     async def _goto(self, ctx: BrowserContext, request: FetchRequest) -> FetchResult:
         page: Page = await ctx.new_page()
@@ -98,9 +153,14 @@ class BrowserEngine(BaseEngine):
                 await page.wait_for_selector(request.wait_for, timeout=30000)
             else:
                 await page.wait_for_timeout(500)
+            if self.infinite_scroll:
+                await self._scroll_to_load_more(page)
+            if self.behavior is not None:
+                await self.behavior.human_scroll(page)
+                await self.behavior.human_mouse_trail(page)
             final_url = page.url
             status_code = resp.status if resp is not None else None
-            content = await page.content()
+            content = await self._content_with_shadow(page) if self.extract_shadow else await page.content()
         except Exception as exc:
             raise NotReachableError(f"browser goto failed for {request.url}: {exc}") from exc
         finally:

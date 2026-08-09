@@ -6,10 +6,17 @@ import asyncio
 import random
 import time
 
+from chameleon.anti_detection.captcha_solver import CaptchaRouter
 from chameleon.anti_detection.identity_faker import IdentityFaker
 from chameleon.anti_detection.proxy_manager import ProxyManager
 from chameleon.core.content_validator import ContentValidator
-from chameleon.core.exceptions import BlockedError, ChameleonError, NotReachableError, ScrapeStatus
+from chameleon.core.exceptions import (
+    BlockedError,
+    CaptchaRequiredError,
+    ChameleonError,
+    NotReachableError,
+    ScrapeStatus,
+)
 from chameleon.core.models import (
     EngineType,
     FetchRequest,
@@ -19,6 +26,7 @@ from chameleon.core.models import (
 )
 from chameleon.engines.base import BaseEngine
 from chameleon.engines.http_engine import HttpEngine
+from chameleon.engines.tls_engine import TlsHttpEngine
 from chameleon.infra.logging import get_logger
 from chameleon.infra.session_pool import SessionPool
 from chameleon.utils.url_utils import hostname
@@ -29,13 +37,15 @@ _ESCALATABLE_REASONS = {"blocked_status_403", "blocked_status_429", "content_too
 
 
 class SmartRouter:
-    """决策链（方案 6 级升级链的 P1/P2 子集）：
+    """决策链（方案 7 的 6 级升级链）：
 
-    Level 0: HTTP 裸请求
-    Level 1: HTTP + 自定义 UA + 完整请求头
-    Level 2: HTTP + UA 轮换 + 代理 + 完整请求头
-    Level 4: Browser + stealth + 代理
-    （P4 将插入 Level 3: TLS 伪装；Level 5: 行为模拟；Level 6: 验证码）
+    L0: HTTP 裸请求
+    L1: HTTP + 自定义 UA + 完整请求头
+    L2: HTTP + UA 轮换 + 代理 + 完整请求头
+    L3: TLS 指纹模拟（curl_cffi）+ 代理
+    L4: Browser + stealth
+    L5: Browser + 行为模拟（引擎侧配置）
+    L6: 验证码检测/处理（CaptchaRouter）
     """
 
     def __init__(
@@ -43,6 +53,8 @@ class SmartRouter:
         http_engine: HttpEngine,
         browser_engine: BaseEngine | None = None,
         *,
+        tls_engine: TlsHttpEngine | None = None,
+        captcha_router: CaptchaRouter | None = None,
         validator: ContentValidator | None = None,
         identity_faker: IdentityFaker | None = None,
         proxy_manager: ProxyManager | None = None,
@@ -51,6 +63,8 @@ class SmartRouter:
     ) -> None:
         self.http_engine = http_engine
         self.browser_engine = browser_engine
+        self.tls_engine = tls_engine
+        self.captcha_router = captcha_router
         self.validator = validator or ContentValidator()
         self.identity = identity_faker or IdentityFaker()
         self.proxy_manager = proxy_manager
@@ -97,9 +111,12 @@ class SmartRouter:
             return [(0, "bare", request)]
         steps: list[tuple[int, str, FetchRequest]] = [(0, "bare", request)]
         faked_headers = {**request.headers, **self.identity.generate_headers(request.url)}
-        steps.append((1, "faked_headers", request.model_copy(update={"headers": faked_headers})))
+        faked = request.model_copy(update={"headers": faked_headers})
+        steps.append((1, "faked_headers", faked))
         if self.proxy_manager is not None:
-            steps.append((2, "proxy+ua", request.model_copy(update={"headers": faked_headers})))
+            steps.append((2, "proxy+ua", faked))
+        if self.tls_engine is not None:
+            steps.append((3, "tls", faked))
         if self.browser_engine is not None:
             steps.append((4, "browser", request))
         return steps
@@ -122,6 +139,15 @@ class SmartRouter:
                 result = await self._fetch_with_retry(engine, request.model_copy(update={"proxy": proxy}))
                 if result.proxy_used:
                     await self._mark_proxy_success(proxy)
+            elif level == 3:
+                if self.tls_engine is None:
+                    return FetchResult(url=request.url, engine=EngineType.HTTP_STEALTH, error="no tls engine"), False, "no_tls"
+                engine = self.tls_engine
+                proxy = await self._acquire_proxy()
+                tls_request = request.model_copy(update={"proxy": proxy}) if proxy else request
+                result = await self._fetch_with_retry(engine, tls_request)
+                if proxy:
+                    await self._mark_proxy_success(proxy)
             else:
                 engine = self._require_browser()
                 result = await self._fetch_with_retry(engine, request)
@@ -142,6 +168,15 @@ class SmartRouter:
             )
 
         valid, reason = self.validator.is_valid(result)
+        # 验证码检测（L6）：内容含验证码特征 → 尝试解决，失败上报
+        if self.captcha_router is not None:
+            captcha_type = self.captcha_router.detect(result.content)
+            if captcha_type is not None:
+                solved, ctype, _text = await self.captcha_router.solve(result.content)
+                if not solved:
+                    raise CaptchaRequiredError(f"captcha triggered: {ctype}")
+                reason = "captcha_solved_retry"
+                return result, False, reason
         js_shell = valid and self.validator.is_js_shell(result)
         if valid and not js_shell:
             result.escalation_level = level

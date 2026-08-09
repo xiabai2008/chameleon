@@ -94,6 +94,61 @@ PRODUCTS_HTML = """<!DOCTYPE html>
 """
 
 
+SHADOW_PAGE = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Shadow DOM 测试</title></head>
+<body>
+<h1>Shadow 页面</h1>
+<my-widget></my-widget>
+<script>
+class MyWidget extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({mode: 'open'});
+    shadow.innerHTML = '<h2>Shadow 内部标题</h2><p>Shadow 内部文本内容，普通 DOM 无法直接读取。</p>';
+  }
+}
+customElements.define('my-widget', MyWidget);
+</script>
+</body></html>
+"""
+
+INFINITE_PAGE = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>无限滚动测试</title>
+<style>li { padding: 160px 0; border-bottom: 1px solid #eee; }</style>
+</head>
+<body>
+<h1>无限滚动列表</h1>
+<ul id="list"></ul>
+<script>
+let count = 0;
+function addItems(n) {
+  const list = document.getElementById('list');
+  for (let i = 0; i < n; i++) {
+    const li = document.createElement('li');
+    li.textContent = '滚动加载项 ' + (++count) + ' - 内容填充保证足够长度以便校验';
+    list.appendChild(li);
+  }
+}
+addItems(5);
+window.addEventListener('scroll', () => {
+  if (window.scrollY + window.innerHeight >= document.body.scrollHeight - 50) {
+    addItems(5);
+  }
+});
+</script>
+</body></html>
+"""
+
+CAPTCHA_PAGE = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>安全验证</title></head>
+<body>
+<h1>请完成滑块验证</h1>
+<p>拖动滑块完成验证后继续访问。</p>
+<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" alt="captcha">
+<div class="slider-container"><div class="slider"></div></div>
+</body></html>
+"""
+
+
 def create_test_app() -> FastAPI:
     app = FastAPI()
 
@@ -140,6 +195,18 @@ def create_test_app() -> FastAPI:
     @app.get("/products")
     async def products() -> HTMLResponse:
         return HTMLResponse(PRODUCTS_HTML)
+
+    @app.get("/shadow")
+    async def shadow() -> HTMLResponse:
+        return HTMLResponse(SHADOW_PAGE)
+
+    @app.get("/infinite")
+    async def infinite() -> HTMLResponse:
+        return HTMLResponse(INFINITE_PAGE)
+
+    @app.get("/captcha-page")
+    async def captcha_page() -> HTMLResponse:
+        return HTMLResponse(CAPTCHA_PAGE)
 
     @app.get("/gzip")
     async def gzip_page() -> Response:
