@@ -308,6 +308,10 @@ class Chameleon:
                 await page.close()
         return entries[:200]
 
+    async def get_websocket_log(self, url: str, *, timeout_ms: int = 8000) -> list[dict[str, Any]]:
+        """拦截页面 WebSocket 帧（方案场景 16，增量数据提取）。"""
+        return await self.browser_engine.collect_websocket_frames(url, timeout_ms=timeout_ms)
+
     async def get_robots_txt(self, url: str) -> str:
         from chameleon.crawler.robots import RobotsTxt
 

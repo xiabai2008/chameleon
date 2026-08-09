@@ -23,7 +23,7 @@ ANTI_BOT_URL = f"http://127.0.0.1:{ANTI_BOT_PORT}"
 class _ServerThread(threading.Thread):
     def __init__(self, app: FastAPI, port: int) -> None:
         super().__init__(daemon=True)
-        self._config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error")
+        self._config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error", ws="wsproto")
         self._server = uvicorn.Server(self._config)
 
     def run(self) -> None:

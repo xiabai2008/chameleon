@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
 STATIC_PAGE = """<!DOCTYPE html>
@@ -181,6 +181,24 @@ ETAG_VALUE = '"chameleon-test-etag-v1"'
 _etag_requests: list[str] = []
 
 
+WEBSOCKET_PAGE = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>WebSocket 测试</title></head>
+<body>
+<h1>WebSocket 页面</h1>
+<div id="feed"></div>
+<script>
+const ws = new WebSocket('ws://127.0.0.1:8765/ws');
+ws.onmessage = (e) => {
+  const feed = document.getElementById('feed');
+  const item = document.createElement('p');
+  item.textContent = '推送: ' + e.data;
+  feed.appendChild(item);
+};
+</script>
+</body></html>
+"""
+
+
 def create_test_app() -> FastAPI:
     app = FastAPI()
 
@@ -259,6 +277,24 @@ def create_test_app() -> FastAPI:
     @app.get("/etag-count")
     async def etag_count() -> dict[str, int]:
         return {"requests": len(_etag_requests)}
+
+    @app.get("/ws-page")
+    async def ws_page() -> HTMLResponse:
+        return HTMLResponse(WEBSOCKET_PAGE)
+
+    @app.websocket("/ws")
+    async def ws_endpoint(websocket: WebSocket) -> None:
+        await websocket.accept()
+        try:
+            for i in range(3):
+                await websocket.send_text(f"tick-{i}")
+                import asyncio
+
+                await asyncio.sleep(0.2)
+        except Exception:
+            pass
+        finally:
+            await websocket.close()
 
     @app.get("/robots.txt")
     async def robots() -> PlainTextResponse:

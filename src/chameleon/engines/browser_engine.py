@@ -6,6 +6,7 @@ import asyncio
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
@@ -185,6 +186,30 @@ class BrowserEngine(BaseEngine):
                 return await self._goto_with_proxy(ctx, request)
         async with self.pool.borrow() as ctx:
             return await self._goto(ctx, request)
+
+    async def collect_websocket_frames(self, url: str, *, timeout_ms: int = 8000) -> list[dict[str, Any]]:
+        """WebSocket 帧拦截（方案场景 16）：收集页面内 WS 收发的消息帧。"""
+        entries: list[dict[str, Any]] = []
+
+        async def on_websocket(ws: Any) -> None:
+            async def on_frame(payload: str) -> None:
+                entries.append({"type": "received", "data": payload})
+
+            async def on_frame_sent(payload: str) -> None:
+                entries.append({"type": "sent", "data": payload})
+
+            ws.on("framereceived", on_frame)
+            ws.on("framesent", on_frame_sent)
+
+        async with self.pool.borrow() as ctx:
+            page = await ctx.new_page()
+            try:
+                page.on("websocket", on_websocket)
+                await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                await page.wait_for_timeout(timeout_ms)
+            finally:
+                await page.close()
+        return entries
 
     async def _goto_with_proxy(self, ctx: BrowserContext, request: FetchRequest) -> FetchResult:
         """代理场景：为本次请求创建带代理配置的独立 context。"""

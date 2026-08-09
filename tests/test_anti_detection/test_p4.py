@@ -204,3 +204,16 @@ async def test_browser_infinite_scroll(test_server: str) -> None:
     assert "滚动加载项" in result.content
     assert result.content.count("滚动加载项") >= 10  # 初始 5 项 + 滚动追加
     await browser.close()
+
+
+@pytest.mark.browser
+@pytest.mark.asyncio
+async def test_browser_websocket_frame_interception(test_server: str) -> None:
+    """WebSocket 帧拦截：收集页面 WS 收到的推送消息。"""
+    from chameleon.engines.browser_engine import BrowserEngine
+
+    browser = BrowserEngine(pool_size=1, headless=True)
+    frames = await browser.collect_websocket_frames(f"{test_server}/ws-page", timeout_ms=3000)
+    received = [f["data"] for f in frames if f["type"] == "received"]
+    assert any("tick-" in d for d in received), f"frames={frames}"
+    await browser.close()
