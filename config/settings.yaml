@@ -1,0 +1,47 @@
+# Chameleon 全局配置
+# 优先级：环境变量(CHAMELEON_*) > 本文件 > 代码默认值
+app_name: chameleon
+debug: false
+log_level: INFO
+log_json: false
+
+engine:
+  http_timeout: 15.0
+  browser_timeout: 45.0
+  max_retries: 3
+  min_content_length: 500
+  browser_pool_size: 2
+  browser_headless: true
+
+proxy:
+  enabled: false
+  pool_type: static       # static | redis
+  static_list: []
+  redis_url: ""
+  health_check_interval: 300
+  min_score: 30
+  default_score: 50
+
+behavior:
+  min_interval: 2.0
+  max_interval: 10.0
+  scroll_steps: 5
+  scroll_delay: 0.8
+
+crawl:
+  default_max_pages: 50
+  default_max_depth: 3
+  concurrency: 8
+  per_domain_qps: 2.0
+  respect_robots: true
+
+captcha:
+  provider: ddddocr       # ddddocr | capsolver | twocaptcha | none
+  api_key: ""
+  auto_retry: 2
+
+security:
+  api_key: ""
+  enable_ssrf_protection: true
+  url_whitelist: []
+  rate_limit_per_minute: 120
