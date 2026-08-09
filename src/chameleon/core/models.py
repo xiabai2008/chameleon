@@ -37,7 +37,8 @@ class ScrapeMetadata(BaseModel):
     response_time_ms: int = 0
     content_length: int = 0
     language: str | None = None
-    engine: EngineType = EngineType.HTTP
+    # str 支持第三方 Provider 结果（如 "provider:firecrawl"）
+    engine: EngineType | str = EngineType.HTTP
     escalation_level: int = 0
     proxy_used: str | None = None
     retries: int = 0

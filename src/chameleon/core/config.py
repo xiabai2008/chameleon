@@ -73,6 +73,27 @@ class SecurityConfig(BaseModel):
     rate_limit_per_minute: int = 120
 
 
+class ProviderConfig(BaseModel):
+    """第三方服务兜底配置（方案 P8-9）。"""
+
+    enabled: bool = False
+    type: str = "firecrawl"  # firecrawl | brightdata | none
+    api_key: str = ""
+    base_url: str = "https://api.firecrawl.dev"
+    customer: str = ""  # brightdata 客户号
+    zone: str = "web_unlocker"
+    zone_password: str = ""
+    timeout: float = 60.0
+
+
+class CaptchaTrainingConfig(BaseModel):
+    """验证码自训练配置（方案 P8-8）。"""
+
+    model_path: str = "data/captcha_model.npz"
+    sample_dir: str = "data/captcha_samples"
+    threshold: float = 0.7
+
+
 class Settings(BaseSettings):
     """全局配置，env 前缀 CHAMELEON_。"""
 
@@ -94,6 +115,8 @@ class Settings(BaseSettings):
     crawl: CrawlConfig = CrawlConfig()
     captcha: CaptchaConfig = CaptchaConfig()
     security: SecurityConfig = SecurityConfig()
+    provider: ProviderConfig = ProviderConfig()
+    captcha_training: CaptchaTrainingConfig = CaptchaTrainingConfig()
 
     @classmethod
     def settings_customise_sources(

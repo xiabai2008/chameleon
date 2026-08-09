@@ -23,6 +23,7 @@ from chameleon.engines.tls_engine import TlsHttpEngine
 from chameleon.infra.cache import CacheLayer
 from chameleon.infra.logging import bind_request_id, configure_logging, get_logger
 from chameleon.infra.metrics import Metrics
+from chameleon.interfaces.providers.base import BaseProvider
 from chameleon.pipeline.extractors.llm_extractor import LLMExtractor, OpenAIClient
 from chameleon.pipeline.pipeline import Pipeline
 from chameleon.utils.url_utils import hostname
@@ -72,6 +73,7 @@ class Chameleon:
         self.cache = CacheLayer()
         self.metrics = Metrics()
         self.api_engine = ApiEngine(self.http_engine)
+        self.provider: BaseProvider | None = self._build_provider()
         self.robots = RobotsTxt()
         self.crawler = DeepCrawler(
             self.router,
@@ -85,6 +87,39 @@ class Chameleon:
         """启用 LLM 语义提取 / Hybrid 模式。"""
         self.llm = LLMExtractor(client=OpenAIClient(base_url, api_key, model))
         self.pipeline.llm = self.llm
+
+    def _build_provider(self) -> BaseProvider | None:
+        """按配置构建第三方兜底 Provider（P8-9）。"""
+        cfg = self.settings.provider
+        if not cfg.enabled:
+            return None
+        if cfg.type == "brightdata" and cfg.customer:
+            from chameleon.interfaces.providers.brightdata import BrightDataProvider
+
+            return BrightDataProvider(
+                cfg.customer,
+                zone=cfg.zone,
+                password=cfg.zone_password,
+                timeout=cfg.timeout,
+            )
+        if cfg.type == "firecrawl" and cfg.api_key:
+            from chameleon.interfaces.providers.firecrawl import FirecrawlProvider
+
+            return FirecrawlProvider(cfg.api_key, base_url=cfg.base_url, timeout=cfg.timeout)
+        return None
+
+    async def _provider_fallback(self, url: str, output_format: str) -> ScrapeResult | None:
+        """自有引擎失败后的第三方兜底。"""
+        if self.provider is None:
+            return None
+        try:
+            result = await self.provider.scrape(url, output_format=output_format)
+            if result is not None:
+                log.info("provider_fallback_used", url=url, provider=self.provider.name)
+            return result
+        except Exception as exc:
+            log.warning("provider_fallback_failed", url=url, provider=self.provider.name, error=str(exc))
+            return None
 
     async def scrape(
         self,
@@ -123,6 +158,10 @@ class Chameleon:
                 mode=mode,
             )
         except ChameleonError as exc:
+            # 自有引擎全失败 → 第三方服务兜底（P8-9）
+            fallback = await self._provider_fallback(url, output_format)
+            if fallback is not None:
+                return fallback
             return ScrapeResult(
                 status=exc.status,
                 url=url,

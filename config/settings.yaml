@@ -45,3 +45,20 @@ security:
   enable_ssrf_protection: true
   url_whitelist: []
   rate_limit_per_minute: 120
+
+# 第三方服务兜底（P8-9）：自有引擎全失败时尝试
+provider:
+  enabled: false
+  type: firecrawl           # firecrawl | brightdata | none
+  api_key: ""
+  base_url: https://api.firecrawl.dev
+  customer: ""              # brightdata 客户号
+  zone: web_unlocker
+  zone_password: ""
+  timeout: 60.0
+
+# 验证码自训练（P8-8）：模板库模型
+captcha_training:
+  model_path: data/captcha_model.npz
+  sample_dir: data/captcha_samples
+  threshold: 0.7
