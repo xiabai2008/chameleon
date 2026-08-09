@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+nox/
+*.pyd
+*.so
+.cache/
+
+# 环境与密钥
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# 数据与缓存
+data/
+logs/
+*.db
+*.sqlite3
+*.log
+
+# 截图/临时输出
+output/
+tmp/
+screenshots/
+
+# Playwright
+node_modules/
+test-results/
+playwright-report/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
