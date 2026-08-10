@@ -1,5 +1,14 @@
 # Chameleon 🦎
 
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/xiabai2008/chameleon/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2008/chameleon/actions)
+[![Tests](https://img.shields.io/badge/tests-229%20passed-brightgreen)](https://github.com/xiabai2008/chameleon/actions)
+[![Ruff](https://img.shields.io/badge/code_style-ruff-black.svg)](https://github.com/astral-sh/ruff)
+[![Mypy](https://img.shields.io/badge/mypy-strict-green.svg)](https://github.com/xiabai2008/chameleon/actions)
+[![GitHub stars](https://img.shields.io/github/stars/xiabai2008/chameleon.svg?style=social&label=Star)](https://github.com/xiabai2008/chameleon)
+[![GitHub forks](https://img.shields.io/github/forks/xiabai2008/chameleon.svg?style=social&label=Fork)](https://github.com/xiabai2008/chameleon)
+
 面向真实世界反爬、动态渲染、异常容错的 AI Agent 爬虫工具。提供 **MCP Server + REST API + CLI** 三套 Agent 友好接口，核心理念：**分层对抗、自适应降级、Agent 友好输出**。
 
 ## 核心能力
@@ -81,3 +90,7 @@ uv run mypy src
 ## 开源
 
 [MIT](LICENSE)
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=xiabai2008/chameleon&type=Date)](https://star-history.com/#xiabai2008/chameleon&Date)
