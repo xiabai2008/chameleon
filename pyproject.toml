@@ -107,6 +107,14 @@ disable_error_code = ["untyped-decorator", "no-any-return"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-q"
+filterwarnings = [
+    # pydantic-settings: FastMCP lifespan 字段前向引用未解析
+    "ignore:Field 'lifespan' has an incomplete definition",
+    # curl_cffi Windows ProactorEventLoop: 仅 cosmetic 警告，不影响功能
+    "ignore::curl_cffi.aio.CurlCffiWarning",
+    # Windows asyncio deallocator: 管道关闭后的残留 ResourceWarning
+    "ignore:Exception ignored while calling deallocator",
+]
 markers = [
     "integration: 需要外部资源（网络/Redis/浏览器）的集成测试",
     "browser: 需要 Playwright 的测试",

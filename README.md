@@ -57,14 +57,6 @@ Agent → MCP/REST/CLI → Chameleon 门面
 ## 测试
 
 ```bash
-uv run pytest          # 99 个测试（含 Playwright 真实渲染、反爬模拟站对抗）
-uv run ruff check src tests
-uv run mypy src
-```
-
-## 测试
-
-```bash
 uv run pytest          # 229 个测试（含 Playwright 真实渲染、反爬模拟站对抗）
 uv run ruff check src tests
 uv run mypy src
