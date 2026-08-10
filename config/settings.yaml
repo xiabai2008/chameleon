@@ -14,10 +14,14 @@ engine:
   browser_headless: true
 
 proxy:
-  enabled: false
-  pool_type: static       # static | redis
-  static_list: []
-  redis_url: ""
+  enabled: false                        # 生产环境设为 true
+  pool_type: static                     # static | redis（生产推荐 redis 分布式池）
+  static_list: []                       # pool_type=static 时的手动代理列表
+  # 生产环境示例：
+  #   static_list:
+  #     - "http://user:pass@proxy1:8080"
+  #     - "http://user:pass@proxy2:8080"
+  redis_url: "redis://localhost:6379/0" # pool_type=redis 的连接（需 docker-compose up redis）
   health_check_interval: 300
   min_score: 30
   default_score: 50
