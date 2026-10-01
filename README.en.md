@@ -85,3 +85,12 @@ uv run mypy src
 ## License
 
 [MIT](LICENSE)
+
+---
+
+## ⭐ Star the Project
+
+If you find Chameleon useful, please consider giving it a **star** ⭐ — it means a lot to the maintainer and helps others discover it!
+
+> 如果这个项目对你有帮助，欢迎给个 Star ⭐
+

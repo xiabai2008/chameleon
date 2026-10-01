@@ -91,6 +91,14 @@ uv run mypy src
 
 [MIT](LICENSE)
 
+---
+
+## ⭐ 求个 Star
+
+如果这个项目对你有帮助，欢迎点右上角给个 **Star** ⭐ —— 这是对开源作者最大的鼓励，也能让更多人发现它！
+
+> If you find Chameleon useful, please consider giving it a **star** ⭐ — it means a lot!
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=xiabai2008/chameleon&type=Date)](https://star-history.com/#xiabai2008/chameleon&Date)
