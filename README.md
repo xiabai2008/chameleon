@@ -1,9 +1,9 @@
 # Chameleon 🦎
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/xiabai2008/chameleon/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2008/chameleon/actions)
-[![Tests](https://img.shields.io/badge/tests-229%20passed-brightgreen)](https://github.com/xiabai2008/chameleon/actions)
+[![Tests](https://img.shields.io/badge/tests-273%20passed-brightgreen)](https://github.com/xiabai2008/chameleon/actions)
 [![Ruff](https://img.shields.io/badge/code_style-ruff-black.svg)](https://github.com/astral-sh/ruff)
 [![Mypy](https://img.shields.io/badge/mypy-strict-green.svg)](https://github.com/xiabai2008/chameleon/actions)
 [![GitHub stars](https://img.shields.io/github/stars/xiabai2008/chameleon.svg?style=social&label=Star)](https://github.com/xiabai2008/chameleon)

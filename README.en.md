@@ -1,5 +1,11 @@
 # Chameleon 🦎
 
+[![CI](https://github.com/xiabai2008/chameleon/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2008/chameleon/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
+[![Tests](https://img.shields.io/badge/tests-273%20passed-brightgreen.svg)](#tests)
+[![mypy: strict](https://img.shields.io/badge/mypy-strict-blue.svg)](https://mypy-lang.org/)
+
 A production-grade web scraping tool for AI agents, built for the real world: anti-bot detection, dynamic rendering, and fault tolerance. Ships with **MCP Server + REST API + CLI** agent-friendly interfaces. Core philosophy: **layered evasion, adaptive degradation, agent-friendly output**.
 
 ## Highlights
